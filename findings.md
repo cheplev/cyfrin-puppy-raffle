@@ -178,3 +178,114 @@ contract ReentrancyAttacker {
 ```
 
 In that case we first remove the player from the `players` array, then we send the ETH to the player, it will protect the contract from reentrancy.
+
+
+### [H-3] Integer overflow vulnerability in `PuppyRaffle::totalFees` allows fees to be reset
+
+**Description:** In Solidity versions prior to 0.8.0, arithmetic operations can overflow/underflow without reverting. The `PuppyRaffle` contract uses Solidity 0.7.6 and declares `totalFees` as a `uint64`, which can only store values up to 2^64 - 1 (18,446,744,073,709,551,615). 
+
+When `totalFees` exceeds this maximum value, it will overflow and reset to 0, causing loss of fee accounting and allowing attackers to potentially steal fees that should be reserved for the contract owner.
+
+```javascript
+contract PuppyRaffle {
+    uint64 public totalFees = 0;
+    ...
+}
+```
+
+**Impact:** The contract owner could lose fee revenue when `totalFees` overflows if totalfees greater than 18,446,744,073,709,551,615.(~18.5 ethers)
+
+**Proof of Concept:**
+1. `totalFees` starts at 0
+2. After many raffle entries, `totalFees` approaches the uint64 maximum (2^64 - 1)
+3. One more raffle entry causes `totalFees` to overflow back to 0
+4. All accumulated fees are effectively lost from an accounting perspective
+
+```javascript
+    uint64 totalFees = 18446744073709551615;
+    totalFees = totalFees + 1;
+    console.log(totalFees);
+    // result is 0
+``` 
+
+**Recommended Mitigation:** Change `totalFees` to use `uint256` instead of `uint64` to prevent overflow:
+
+```diff
+contract PuppyRaffle {
+-    uint64 public totalFees = 0;
++    uint256 public totalFees = 0;
+}
+```
+
+Alternatively, upgrade to Solidity 0.8.0 or later which includes built-in overflow protection.
+
+
+### [H-4] `PuppyRaffle::selectWinner()` weakly randomizes the winner selection
+
+**Description:** The use of keccak256 hash functions on predictable values like block.timestamp, block.number, or similar data, including modulo operations on these values, should be avoided for generating randomness, as they are easily predictable and manipulable. The PREVRANDAO opcode also should not be used as a source of randomness. Instead, utilize Chainlink VRF for cryptographically secure and provably random values to ensure protocol integrity.
+
+**Impact:** Weak randomization can lead to predictable winner selection, potentially allowing an attacker to manipulate the outcome of the raffle.
+
+
+### [H-5] WithdrawFees can be broken if someone sends some eth to the contract
+
+**Description:** The `PuppyRaffle::withdrawFees()` function checks if the contract balance is equal to `totalFees`. If someone sends some eth to the contract, it will break the withdrawFees function.
+
+**Impact:** The owner can't withdraw the fees.
+
+**Proof of Concept:**
+
+<details> 
+<summary>PoC</summary>
+Here is the attacker contract that will send some eth to the puppyRaffle contract while selfdestructing.
+
+```javascript
+//SPDX-License-Identifier: MIT;
+
+pragma solidity ^0.7.6;
+
+import {PuppyRaffle} from "../../src/PuppyRaffle.sol";
+
+
+contract WithdrawFeesAttacker {
+    PuppyRaffle target;
+
+
+    constructor(address _target) payable {
+        target = PuppyRaffle(_target);
+    }
+
+    function attack() public {
+        selfdestruct(payable(address(target)));
+    }
+}
+
+```
+</details>
+
+
+**Recommended Mitigation:** change the logic of withdrawFees and maybe just withraw all the balance? Why to check if it's equal to totalFees?
+
+
+
+### [L-1] `PuppyRaffle::withdrawFees()` it's impossible to withdraw the fees while there are players in the raffle
+
+**Description:** The `PuppyRaffle::withdrawFees()` function checks if there are any players in the raffle, and if there are, it prevents the owner from withdrawing the fees.
+
+**Impact:** The owner can't withdraw the fees if there are players in the raffle.
+
+**Proof of Concept:**
+
+```javascript
+    function withdrawFees() external {
+ @>     require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are currently players active!");
+        uint256 feesToWithdraw = totalFees;
+        totalFees = 0;
+        (bool success,) = feeAddress.call{value: feesToWithdraw}("");
+        require(success, "PuppyRaffle: Failed to withdraw fees");
+    }
+
+``` 
+
+**Recommended Mitigation:** change the logic of withdrawFees let it withdraw while there are players in the raffle.
+

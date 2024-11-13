@@ -5,10 +5,15 @@ pragma experimental ABIEncoderV2;
 import {Test, console} from "forge-std/Test.sol";
 import {PuppyRaffle} from "../src/PuppyRaffle.sol";
 import {ReentrancyAttacker} from "./contracts/ReentrancyAttacker.sol";
+import {SelectWinnerAttacker} from "./contracts/SelectWinnerAttacker.sol";
+import {WithdrawFeesAttacker} from "./contracts/WithdrawFeesAttacker.sol";
+
 
 contract PuppyRaffleTest is Test {
     PuppyRaffle puppyRaffle;
     ReentrancyAttacker reentrancyAttacker;
+    SelectWinnerAttacker selectWinnerAttacker;
+    WithdrawFeesAttacker withdrawFeesAttacker;
     uint256 entranceFee = 1e18;
     address playerOne = address(1);
     address playerTwo = address(2);
@@ -25,8 +30,9 @@ contract PuppyRaffleTest is Test {
         );
 
         reentrancyAttacker = new ReentrancyAttacker{value: 10 ether}(address(puppyRaffle));
+        selectWinnerAttacker = new SelectWinnerAttacker{value: 10 ether}(address(puppyRaffle));
+        withdrawFeesAttacker = new WithdrawFeesAttacker{value: 10 ether}(address(puppyRaffle));
     }
-
     //////////////////////
     /// EnterRaffle    ///
     /////////////////////
@@ -244,9 +250,32 @@ contract PuppyRaffleTest is Test {
         uint256 balanceBefore = address(puppyRaffle).balance;
         reentrancyAttacker.attack();
         uint256 balanceAfter = address(puppyRaffle).balance;
-        console.log(balanceBefore);
-        console.log(balanceAfter);
+
         assertEq(balanceAfter, 0);
+    }
+
+    function test_selectWinnerCantSendMoney() public playersEntered {
+        vm.warp(block.timestamp + duration + 1);
+        vm.roll(block.number + 1);
+        vm.expectRevert("PuppyRaffle: Failed to send prize pool to winner");
+        selectWinnerAttacker.attack();
+
+    }
+
+    function test_withdrawFees() public playersEntered {
+        vm.warp(block.timestamp + duration + 1);
+        vm.roll(block.number + 1);
+        puppyRaffle.selectWinner();
+        
+        uint256 balanceBefore = address(puppyRaffle).balance;
+
+        withdrawFeesAttacker.attack();
+        uint256 balanceAfter = address(puppyRaffle).balance;
+        assert(balanceAfter > balanceBefore);
+
+        vm.expectRevert("PuppyRaffle: There are currently players active!");
+        puppyRaffle.withdrawFees();
+        
     }
 }
 

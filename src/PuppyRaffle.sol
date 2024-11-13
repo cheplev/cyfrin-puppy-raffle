@@ -90,11 +90,11 @@ contract PuppyRaffle is ERC721, Ownable {
 
         // @audit DOS
         // Check for duplicates
-        for (uint256 i = 0; i < players.length - 1; i++) {
-            for (uint256 j = i + 1; j < players.length; j++) {
-                require(players[i] != players[j], "PuppyRaffle: Duplicate player");
-            }
-        }
+        // for (uint256 i = 0; i < players.length - 1; i++) {
+        //     for (uint256 j = i + 1; j < players.length; j++) {
+        //         require(players[i] != players[j], "PuppyRaffle: Duplicate player");
+        //     }
+        // }
         emit RaffleEnter(newPlayers);
     }
 
@@ -156,17 +156,16 @@ contract PuppyRaffle is ERC721, Ownable {
         address winner = players[winnerIndex];
         uint256 totalAmountCollected = players.length * entranceFee;
 
-    // @audit @gas can we divide by 5? 
-    // @audit @gas can we then total - prizePool = fee?
         uint256 prizePool = (totalAmountCollected * 80) / 100;
 
         uint256 fee = (totalAmountCollected * 20) / 100;
+        // @audit: overflow?
         totalFees = totalFees + uint64(fee);
 
         uint256 tokenId = totalSupply();
 
         // We use a different RNG calculate from the winnerIndex to determine rarity
-        // @audit: can I calculate the rarity by myself?
+        
         uint256 rarity = uint256(keccak256(abi.encodePacked(msg.sender, block.difficulty))) % 100;
         if (rarity <= COMMON_RARITY) {
             tokenIdToRarity[tokenId] = COMMON_RARITY;
@@ -179,7 +178,11 @@ contract PuppyRaffle is ERC721, Ownable {
         delete players;
         raffleStartTime = block.timestamp;
         previousWinner = winner;
+
+        // @audit: reentrancy?  
         (bool success,) = winner.call{value: prizePool}("");
+        // @audit can we brake it if smart contract will not accept the money? DOS?
+
         require(success, "PuppyRaffle: Failed to send prize pool to winner");
         _safeMint(winner, tokenId);
     }
@@ -187,8 +190,14 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @notice this function will withdraw the fees to the feeAddress
 
     // @audit: onlyOwner?
+
     function withdrawFees() external {
+        // @audit can I sent some eth to brake it?
+
+        // @audit: can't call it while there are players active?
         require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are currently players active!");
+
+
         uint256 feesToWithdraw = totalFees;
         totalFees = 0;
         (bool success,) = feeAddress.call{value: feesToWithdraw}("");
