@@ -289,3 +289,14 @@ contract WithdrawFeesAttacker {
 
 **Recommended Mitigation:** change the logic of withdrawFees let it withdraw while there are players in the raffle.
 
+
+```diff
+    function withdrawFees() external {
+-       require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are currently players active!");
+        uint256 feesToWithdraw = totalFees;
+        totalFees = 0;
+        (bool success,) = feeAddress.call{value: feesToWithdraw}("");
+        require(success, "PuppyRaffle: Failed to withdraw fees");
+    }
+
+``` 
