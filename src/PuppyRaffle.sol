@@ -21,6 +21,8 @@ contract PuppyRaffle is ERC721, Ownable {
     uint256 public immutable entranceFee;
 
     address[] public players;
+
+    // @audit should it be constant?
     uint256 public raffleDuration;
     uint256 public raffleStartTime;
     address public previousWinner;
@@ -90,11 +92,11 @@ contract PuppyRaffle is ERC721, Ownable {
 
         // @audit DOS
         // Check for duplicates
-        // for (uint256 i = 0; i < players.length - 1; i++) {
-        //     for (uint256 j = i + 1; j < players.length; j++) {
-        //         require(players[i] != players[j], "PuppyRaffle: Duplicate player");
-        //     }
-        // }
+        for (uint256 i = 0; i < players.length - 1; i++) {
+            for (uint256 j = i + 1; j < players.length; j++) {
+                require(players[i] != players[j], "PuppyRaffle: Duplicate player");
+            }
+        }
         emit RaffleEnter(newPlayers);
     }
 
@@ -213,6 +215,7 @@ contract PuppyRaffle is ERC721, Ownable {
     }
 
     /// @notice this function will return true if the msg.sender is an active player
+    // @audit: is this function used anywhere else?
     // @audit: add new mapping of userExist (address => bool) for saving gas
     function _isActivePlayer() internal view returns (bool) {
         for (uint256 i = 0; i < players.length; i++) {

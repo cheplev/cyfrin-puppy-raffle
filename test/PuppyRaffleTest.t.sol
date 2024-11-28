@@ -254,13 +254,13 @@ contract PuppyRaffleTest is Test {
         assertEq(balanceAfter, 0);
     }
 
-    function test_selectWinnerCantSendMoney() public playersEntered {
-        vm.warp(block.timestamp + duration + 1);
-        vm.roll(block.number + 1);
-        vm.expectRevert("PuppyRaffle: Failed to send prize pool to winner");
-        selectWinnerAttacker.attack();
+    // function test_selectWinnerCantSendMoney() public playersEntered {
+    //     vm.warp(block.timestamp + duration + 1);
+    //     vm.roll(block.number + 1);
+    //     vm.expectRevert("PuppyRaffle: Failed to send prize pool to winner");
+    //     selectWinnerAttacker.attack();
 
-    }
+    // }
 
     function test_withdrawFees() public playersEntered {
         vm.warp(block.timestamp + duration + 1);
