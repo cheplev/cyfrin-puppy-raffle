@@ -8,7 +8,8 @@ This document contains the findings of the PuppyRaffle smart contract security r
 - Low: Issues that should be fixed but don't pose immediate risks
 
 ## Findings Summary
-- 5 High severity findings
+- 3 High severity findings
+- 2 Medium severity findings
 - 1 Low severity finding
 
 ## Detailed Findings
@@ -164,7 +165,7 @@ function test_denialOfService() public {
 
 **Recommended Mitigation:** Utilize Chainlink VRF for cryptographically secure and provably random values to ensure protocol integrity.
 
-### [H-4] Integer overflow vulnerability in `PuppyRaffle::totalFees` allows fees to be reset
+### [M-1] Integer overflow vulnerability in `PuppyRaffle::totalFees` allows fees to be reset
 
 **Description:** In Solidity versions prior to 0.8.0, arithmetic operations can overflow/underflow without reverting. The `PuppyRaffle` contract uses Solidity 0.7.6 and declares `totalFees` as a `uint64`, which can only store values up to 2^64 - 1 (18,446,744,073,709,551,615).
 
@@ -196,7 +197,7 @@ contract PuppyRaffle {
 
 Alternatively, upgrade to Solidity 0.8.0 or later which includes built-in overflow protection.
 
-### [H-5] WithdrawFees can be broken if someone sends ETH directly to the contract
+### [M-2] WithdrawFees can be broken if someone sends ETH directly to the contract
 
 **Description:** The `PuppyRaffle::withdrawFees()` function checks if the contract balance is equal to `totalFees`. If someone sends some ETH to the contract, it will break the withdrawFees function.
 
